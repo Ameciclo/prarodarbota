@@ -7,9 +7,10 @@ interface PaginacaoBicicletasProps {
   onSolicitar: (codigo: string) => void;
   userCanRequest: boolean;
   userId?: number;
+  userCanManage?: boolean;
 }
 
-export function PaginacaoBicicletas({ bicicletas, onSolicitar, userCanRequest, userId }: PaginacaoBicicletasProps) {
+export function PaginacaoBicicletas({ bicicletas, onSolicitar, userCanRequest, userId, userCanManage }: PaginacaoBicicletasProps) {
   const [paginaAtual, setPaginaAtual] = useState(1);
   const itensPorPagina = 12;
   
@@ -58,12 +59,12 @@ export function PaginacaoBicicletas({ bicicletas, onSolicitar, userCanRequest, u
                   {userCanRequest ? (
                     <Link
                       to={`/solicitar-emprestimo-bicicleta?codigo=${bicicleta.codigo}`}
-                      className="w-full bg-teal-600 text-white px-4 py-2 rounded-md hover:bg-teal-700 transition-colors block text-center no-underline"
+                      className="w-full bg-teal-600 text-white px-4 py-2 rounded-md hover:bg-teal-700 transition-colors block text-center no-underline mb-2"
                     >
                       Solicitar Empréstimo
                     </Link>
                   ) : (
-                    <div className="text-center">
+                    <div className="text-center mb-2">
                       <p className="text-sm text-gray-600 mb-2">
                         Para solicitar empréstimo, você precisa estar cadastrado
                       </p>
@@ -84,11 +85,20 @@ export function PaginacaoBicicletas({ bicicletas, onSolicitar, userCanRequest, u
                   </div>
                   <button
                     disabled
-                    className="w-full bg-gray-300 text-gray-500 px-4 py-2 rounded-md cursor-not-allowed"
+                    className="w-full bg-gray-300 text-gray-500 px-4 py-2 rounded-md cursor-not-allowed mb-2"
                   >
                     Indisponível
                   </button>
                 </div>
+              )}
+              
+              {userCanManage && (
+                <Link
+                  to={`/configurar-bicicleta/${bicicleta.codigo}`}
+                  className="w-full bg-orange-500 text-white px-4 py-2 rounded-md hover:bg-orange-600 transition-colors block text-center no-underline text-sm"
+                >
+                  ⚙️ Configurar
+                </Link>
               )}
             </div>
           </div>

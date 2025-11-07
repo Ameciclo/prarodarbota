@@ -1,26 +1,22 @@
-// Mock do Firebase para desenvolvimento local
-const mockDb = {
-  ref: (path) => ({
-    once: () => Promise.resolve({ 
-      val: () => null,
-      exists: () => false
-    }),
-    set: () => Promise.resolve(),
-    push: () => Promise.resolve({ key: 'mock-key' }),
-    update: () => Promise.resolve(),
-    remove: () => Promise.resolve(),
-    on: () => {},
-    off: () => {},
-    child: (key) => ({
-      once: () => Promise.resolve({ 
-        val: () => null,
-        exists: () => false
-      }),
-      set: () => Promise.resolve(),
-      update: () => Promise.resolve(),
-      remove: () => Promise.resolve()
-    })
-  })
-};
+import admin from "firebase-admin";
+import { readFileSync } from "fs";
+import { join } from "path";
 
-export default mockDb;
+if (!admin.apps.length) {
+  try {
+    const serviceAccount = JSON.parse(
+      readFileSync(join(process.cwd(), "botaprarodar-routes-firebase-adminsdk-fbsvc-8f59076dd1.json"), "utf8")
+    );
+    
+    admin.initializeApp({
+      credential: admin.credential.cert(serviceAccount),
+      databaseURL: "https://botaprarodar-routes-default-rtdb.firebaseio.com/"
+    });
+  } catch (error) {
+    console.error("Erro ao inicializar Firebase:", error);
+    throw error;
+  }
+}
+
+const db = admin.database();
+export default db;

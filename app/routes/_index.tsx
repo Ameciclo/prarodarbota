@@ -158,17 +158,30 @@ export default function Dashboard() {
       </div>
 
       {/* Cards de Acesso Rápido */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
         <Link 
           to="/bota-pra-rodar" 
           className="bg-teal-500 hover:bg-teal-600 text-white p-6 rounded-lg shadow-lg transition-colors no-underline"
         >
           <div className="text-center">
             <div className="text-4xl mb-2">🚴♀️</div>
-            <h2 className="text-xl font-semibold mb-1">Gerenciar Bicicletas</h2>
-            <p className="text-teal-100">Ver, solicitar e gerenciar empréstimos</p>
+            <h2 className="text-xl font-semibold mb-1">Ver Bicicletas</h2>
+            <p className="text-teal-100">Visualizar e solicitar empréstimos</p>
           </div>
         </Link>
+
+        {isAuth(userPermissions, UserCategory.PROJECT_COORDINATORS) && (
+          <Link 
+            to="/gestao" 
+            className="bg-orange-500 hover:bg-orange-600 text-white p-6 rounded-lg shadow-lg transition-colors no-underline"
+          >
+            <div className="text-center">
+              <div className="text-4xl mb-2">🔧</div>
+              <h2 className="text-xl font-semibold mb-1">Gestão</h2>
+              <p className="text-orange-100">Administrar sistema e bicicletas</p>
+            </div>
+          </Link>
+        )}
 
         {isAuth(userPermissions, UserCategory.AMECICLISTAS) && (
           <Link 
@@ -177,8 +190,8 @@ export default function Dashboard() {
           >
             <div className="text-center">
               <div className="text-4xl mb-2">📊</div>
-              <h2 className="text-xl font-semibold mb-1">Estatísticas Detalhadas</h2>
-              <p className="text-blue-100">Relatórios completos e métricas</p>
+              <h2 className="text-xl font-semibold mb-1">Estatísticas</h2>
+              <p className="text-blue-100">Relatórios e métricas detalhadas</p>
             </div>
           </Link>
         )}

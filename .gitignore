@@ -3,6 +3,7 @@
 # credentials
 app/api/serviceAccountKey.json
 serviceAccountKey.json
+botaprarodar-routes-firebase-adminsdk-fbsvc-*.json
 
 
 # dependencies
