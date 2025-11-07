@@ -189,6 +189,19 @@ export default function Dashboard() {
         <h3 className="text-lg font-semibold text-gray-800 mb-4">⚙️ Configurações</h3>
         <div className="space-y-3">
           <Link 
+            to="/cadastro" 
+            className="block bg-white hover:bg-gray-50 p-4 rounded-lg shadow-sm border transition-colors no-underline"
+          >
+            <div className="flex items-center">
+              <span className="text-2xl mr-3">📝</span>
+              <div>
+                <h4 className="font-medium text-gray-800">Cadastro de Usuário</h4>
+                <p className="text-sm text-gray-600">Cadastrar novo usuário no sistema</p>
+              </div>
+            </div>
+          </Link>
+          
+          <Link 
             to="/user" 
             className="block bg-white hover:bg-gray-50 p-4 rounded-lg shadow-sm border transition-colors no-underline"
           >
