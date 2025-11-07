@@ -1,82 +1,62 @@
-import { useLoaderData } from "@remix-run/react";
+import { useLoaderData, Link } from "@remix-run/react";
 import { UserCategory, UserData } from "~/utils/types";
 import { useEffect, useState } from "react";
 import { getTelegramUsersInfo } from "~/utils/users";
 import telegramInit from "~/utils/telegramInit";
-import { ButtonsListWithPermissions } from "~/components/Forms/Buttons";
+import { isAuth } from "~/utils/isAuthorized";
 
 import { loader } from "~/handlers/loaders/_index";
 export { loader };
 
-const links = [
-  {
-    to: "/criar-evento",
-    label: "Criar Evento",
-    icon: "📅",
-    requiredPermission: UserCategory.AMECICLISTAS,
-  },
-  {
-    to: "/solicitar-pagamento",
-    label: "Solicitar Pagamento",
-    icon: "💰",
-    requiredPermission: UserCategory.PROJECT_COORDINATORS,
-  },
-  {
-    to: "/gestao-fornecedores",
-    label: "Gestão de Fornecedores",
-    icon: "📦",
-    requiredPermission: UserCategory.PROJECT_COORDINATORS,
-  },
-  {
-    to: "/biblioteca",
-    label: "Biblioteca",
-    icon: "📚",
-    requiredPermission: UserCategory.ANY_USER,
-  },
-  {
-    to: "/bota-pra-rodar",
-    label: "Bota pra Rodar",
-    icon: "🚴♀️",
-    requiredPermission: UserCategory.ANY_USER,
-  },
-  {
-    to: "/recursos-independentes",
-    label: "Controle de Recursos Independentes",
-    icon: "🏪",
-    requiredPermission: UserCategory.AMECICLISTAS,
-  },
-  {
-    to: "/links-uteis",
-    label: "Lista de Links Úteis",
-    icon: "🔗",
-    requiredPermission: UserCategory.ANY_USER,
-  },
-  {
-    to: "/grupos-de-trabalho",
-    label: "Grupos de Trabalho",
-    icon: "👥",
-    requiredPermission: UserCategory.AMECICLISTAS,
-  },
-  {
-    to: "/user",
-    label: "Suas informações",
-    icon: "⚙️",
-    requiredPermission: UserCategory.ANY_USER,
-  },
-  {
-    to: "/users",
-    label: "Gerenciamento de Usuários",
-    icon: "🔧",
-    requiredPermission: UserCategory.AMECICLO_COORDINATORS,
-    hide: true,
-  },
-];
+// Função para calcular distância aproximada baseada nos dados de sessão
+function calculateDistance(session: any) {
+  if (!session.scans || session.scans.length < 2) return 0;
+  
+  // Estimação baseada na duração da sessão e velocidade média de bicicleta (15 km/h)
+  const durationMs = session.end - session.start;
+  const durationHours = durationMs / (1000 * 60 * 60);
+  const avgSpeed = session.mode === 'intensivo' ? 18 : session.mode === 'economico' ? 12 : 8; // km/h
+  
+  return durationHours * avgSpeed;
+}
 
-export default function Index() {
+// Mock data das bicicletas (simulando dados do Firebase)
+const mockBikesData = {
+  "teste2": {
+    sessions: {
+      "20251103_134416_339": {
+        end: 801150,
+        start: 14966,
+        mode: "economico",
+        totalScans: 9
+      }
+    }
+  },
+  "teste3": {
+    sessions: {
+      "20251102_155736_626": {
+        end: 135203,
+        start: 19806,
+        mode: "intensivo",
+        totalScans: 7
+      }
+    }
+  },
+  "teste4": {
+    sessions: {
+      "20251102_160519_129": {
+        end: 139413,
+        start: 119395,
+        mode: "mega_economico",
+        totalScans: 3
+      }
+    }
+  }
+};
+
+export default function Dashboard() {
   const [user, setUser] = useState<UserData | null>({} as UserData);
-
-  const { usersInfo, currentUserCategories } =
-    useLoaderData<typeof loader>();
+  const { usersInfo, currentUserCategories } = useLoaderData<typeof loader>();
   const [userPermissions, setUserPermissions] = useState(currentUserCategories);
 
   useEffect(() => {
@@ -90,23 +70,153 @@ export default function Index() {
     }
   }, [user]);
 
+  // Calcular estatísticas das bicicletas
+  const bikeStats = Object.entries(mockBikesData).map(([bikeId, data]) => {
+    const sessions = Object.values(data.sessions);
+    const totalDistance = sessions.reduce((acc, session) => acc + calculateDistance(session), 0);
+    const totalSessions = sessions.length;
+    
+    return {
+      id: bikeId,
+      totalDistance: Math.round(totalDistance * 100) / 100,
+      totalSessions,
+      lastSession: sessions[sessions.length - 1]
+    };
+  });
+
+  const totalKm = bikeStats.reduce((acc, bike) => acc + bike.totalDistance, 0);
+  const totalSessions = bikeStats.reduce((acc, bike) => acc + bike.totalSessions, 0);
+
   return (
     <div className="container mx-auto py-8 px-4">
-      <h1 className="text-3xl font-bold text-teal-600 text-center">
-        Ameciclobot Miniapp
-      </h1>
-      {process.env.NODE_ENV === "development" && (
-        <p className="text-xs text-center">
-          Você está no ambiente de DESENVOLVIMENTO
-        </p>
-      )}
-      {process.env.NODE_ENV === "development" && (
-        <p className="text-xs text-center">Permissões de {userPermissions}</p>
-      )}
-      {process.env.NODE_ENV === "production" && (
-        <p className="text-xs text-center">Olá, {user?.first_name}!</p>
-      )}
-      <ButtonsListWithPermissions links={links} userPermissions={userPermissions} />
+      <div className="text-center mb-8">
+        <h1 className="text-4xl font-bold text-teal-600 mb-2">
+          🚴♀️ Bota pra Rodar
+        </h1>
+        <p className="text-gray-600">Dashboard do Sistema</p>
+        {process.env.NODE_ENV === "development" && (
+          <p className="text-xs text-orange-500 mt-2">
+            Ambiente de DESENVOLVIMENTO - Permissões: {userPermissions}
+          </p>
+        )}
+        {process.env.NODE_ENV === "production" && user?.first_name && (
+          <p className="text-gray-500 mt-2">Olá, {user.first_name}!</p>
+        )}
+      </div>
+
+      {/* Estatísticas Gerais */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+        <div className="bg-gradient-to-r from-green-500 to-green-600 text-white p-6 rounded-lg shadow-lg">
+          <div className="text-center">
+            <div className="text-3xl mb-2">📍</div>
+            <h3 className="text-lg font-semibold mb-1">Total Percorrido</h3>
+            <p className="text-2xl font-bold">{Math.round(totalKm * 100) / 100} km</p>
+          </div>
+        </div>
+        
+        <div className="bg-gradient-to-r from-blue-500 to-blue-600 text-white p-6 rounded-lg shadow-lg">
+          <div className="text-center">
+            <div className="text-3xl mb-2">📊</div>
+            <h3 className="text-lg font-semibold mb-1">Sessões Ativas</h3>
+            <p className="text-2xl font-bold">{totalSessions}</p>
+          </div>
+        </div>
+        
+        <div className="bg-gradient-to-r from-purple-500 to-purple-600 text-white p-6 rounded-lg shadow-lg">
+          <div className="text-center">
+            <div className="text-3xl mb-2">🚴</div>
+            <h3 className="text-lg font-semibold mb-1">Bicicletas Ativas</h3>
+            <p className="text-2xl font-bold">{bikeStats.length}</p>
+          </div>
+        </div>
+      </div>
+
+      {/* Ranking de Bicicletas por KM */}
+      <div className="bg-white rounded-lg shadow-lg p-6 mb-8">
+        <h3 className="text-xl font-semibold text-gray-800 mb-4">🏆 Ranking por Quilometragem</h3>
+        <div className="space-y-3">
+          {bikeStats
+            .sort((a, b) => b.totalDistance - a.totalDistance)
+            .map((bike, index) => (
+              <div key={bike.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                <div className="flex items-center">
+                  <span className="text-2xl mr-3">
+                    {index === 0 ? '🥇' : index === 1 ? '🥈' : index === 2 ? '🥉' : '🚴'}
+                  </span>
+                  <div>
+                    <h4 className="font-semibold text-gray-800">Bicicleta {bike.id}</h4>
+                    <p className="text-sm text-gray-600">{bike.totalSessions} sessões</p>
+                  </div>
+                </div>
+                <div className="text-right">
+                  <p className="text-lg font-bold text-teal-600">{bike.totalDistance} km</p>
+                  <p className="text-xs text-gray-500">Modo: {bike.lastSession?.mode}</p>
+                </div>
+              </div>
+            ))}
+        </div>
+      </div>
+
+      {/* Cards de Acesso Rápido */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
+        <Link 
+          to="/bota-pra-rodar" 
+          className="bg-teal-500 hover:bg-teal-600 text-white p-6 rounded-lg shadow-lg transition-colors no-underline"
+        >
+          <div className="text-center">
+            <div className="text-4xl mb-2">🚴♀️</div>
+            <h2 className="text-xl font-semibold mb-1">Gerenciar Bicicletas</h2>
+            <p className="text-teal-100">Ver, solicitar e gerenciar empréstimos</p>
+          </div>
+        </Link>
+
+        {isAuth(userPermissions, UserCategory.AMECICLISTAS) && (
+          <Link 
+            to="/estatisticas-bota-pra-rodar" 
+            className="bg-blue-500 hover:bg-blue-600 text-white p-6 rounded-lg shadow-lg transition-colors no-underline"
+          >
+            <div className="text-center">
+              <div className="text-4xl mb-2">📊</div>
+              <h2 className="text-xl font-semibold mb-1">Estatísticas Detalhadas</h2>
+              <p className="text-blue-100">Relatórios completos e métricas</p>
+            </div>
+          </Link>
+        )}
+      </div>
+
+      {/* Seção de Configurações */}
+      <div className="bg-gray-50 rounded-lg p-6">
+        <h3 className="text-lg font-semibold text-gray-800 mb-4">⚙️ Configurações</h3>
+        <div className="space-y-3">
+          <Link 
+            to="/user" 
+            className="block bg-white hover:bg-gray-50 p-4 rounded-lg shadow-sm border transition-colors no-underline"
+          >
+            <div className="flex items-center">
+              <span className="text-2xl mr-3">👤</span>
+              <div>
+                <h4 className="font-medium text-gray-800">Suas Informações</h4>
+                <p className="text-sm text-gray-600">Gerenciar perfil e dados pessoais</p>
+              </div>
+            </div>
+          </Link>
+
+          {isAuth(userPermissions, UserCategory.AMECICLO_COORDINATORS) && (
+            <Link 
+              to="/users" 
+              className="block bg-white hover:bg-gray-50 p-4 rounded-lg shadow-sm border transition-colors no-underline"
+            >
+              <div className="flex items-center">
+                <span className="text-2xl mr-3">🔧</span>
+                <div>
+                  <h4 className="font-medium text-gray-800">Gerenciar Usuários</h4>
+                  <p className="text-sm text-gray-600">Administrar permissões e usuários</p>
+                </div>
+              </div>
+            </Link>
+          )}
+        </div>
+      </div>
     </div>
   );
 }

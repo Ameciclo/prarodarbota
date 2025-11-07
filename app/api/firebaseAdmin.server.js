@@ -1,17 +1,26 @@
-import admin from "firebase-admin";
-import dotenv from "dotenv";
+// Mock do Firebase para desenvolvimento local
+const mockDb = {
+  ref: (path) => ({
+    once: () => Promise.resolve({ 
+      val: () => null,
+      exists: () => false
+    }),
+    set: () => Promise.resolve(),
+    push: () => Promise.resolve({ key: 'mock-key' }),
+    update: () => Promise.resolve(),
+    remove: () => Promise.resolve(),
+    on: () => {},
+    off: () => {},
+    child: (key) => ({
+      once: () => Promise.resolve({ 
+        val: () => null,
+        exists: () => false
+      }),
+      set: () => Promise.resolve(),
+      update: () => Promise.resolve(),
+      remove: () => Promise.resolve()
+    })
+  })
+};
 
-dotenv.config();
-const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT);
-serviceAccount.private_key = (process.env.FIREBASE_PRIVATE_KEY).replace(/\\n/g, "\n");
-
-if (!admin.apps.length) {
-  admin.initializeApp({
-    credential: admin.credential.cert(serviceAccount),
-    databaseURL: process.env.FIREBASE_DBURL,
-  });
-}
-
-const db = admin.database();
-
-export default db;
+export default mockDb;

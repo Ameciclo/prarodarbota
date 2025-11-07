@@ -10,7 +10,7 @@ export const links: LinksFunction = () => [
 export const meta: MetaFunction = () => {
   return [
     { charset: "utf-8" },
-    { title: "Ameciclobot Mini App" },
+    { title: "Bota pra Rodar" },
     { viewport: "width=device-width,initial-scale=1" }
   ];
 };
