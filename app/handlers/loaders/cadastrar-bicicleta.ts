@@ -1,7 +1,17 @@
-import { json } from "@remix-run/node";
+import { json, type LoaderFunctionArgs } from "@remix-run/node";
+import { getUsersFirebase } from "~/api/firebaseConnection.server";
 
-export async function cadastrarBicicletaLoader() {
-  return json({
-    success: true
-  });
+export async function cadastrarBicicletaLoader({ request }: LoaderFunctionArgs) {
+  try {
+    const users = await getUsersFirebase();
+    
+    return json({
+      users: users || {}
+    });
+  } catch (error) {
+    console.error("Erro ao carregar dados:", error);
+    return json({
+      users: {}
+    });
+  }
 }

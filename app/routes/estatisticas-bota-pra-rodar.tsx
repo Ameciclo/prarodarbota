@@ -1,245 +1,290 @@
 import { useState, useEffect } from "react";
 import { useLoaderData, Link } from "@remix-run/react";
-import { json, type LoaderFunctionArgs } from "@remix-run/node";
-import { getBicicletas, getEmprestimosBicicletas } from "~/api/firebaseConnection.server";
-import type { Bicicleta, EmprestimoBicicleta } from "~/utils/types";
+import { UserCategory, type UserData } from "~/utils/types";
+import { getTelegramUsersInfo } from "~/utils/users";
+import telegramInit from "~/utils/telegramInit";
+import { isAuth } from "~/utils/isAuthorized";
+import { botaPraRodarLoader } from "~/handlers/loaders/bota-pra-rodar";
 
-export async function loader({ request }: LoaderFunctionArgs) {
-  try {
-    const bicicletasData = await getBicicletas();
-    const emprestimosData = await getEmprestimosBicicletas();
-    
-    const bicicletas: Bicicleta[] = bicicletasData ? Object.keys(bicicletasData).map(key => ({ id: key, ...bicicletasData[key] })) : [];
-    const emprestimos: EmprestimoBicicleta[] = emprestimosData ? Object.keys(emprestimosData).map(key => ({ id: key, ...emprestimosData[key] })) : [];
-    
-    return json({ bicicletas, emprestimos });
-  } catch (error) {
-    console.error("Erro ao carregar estatísticas do Bota pra Rodar:", error);
-    return json({ bicicletas: [], emprestimos: [] });
-  }
-}
+export const loader = botaPraRodarLoader;
 
 export default function EstatisticasBotaPraRodar() {
-  const { bicicletas, emprestimos } = useLoaderData<typeof loader>();
-  const [filtroMes, setFiltroMes] = useState("");
-  const [filtroAno, setFiltroAno] = useState(new Date().getFullYear().toString());
+  const { bicicletas, emprestimos, solicitacoes, users } = useLoaderData<typeof loader>();
+  const [user, setUser] = useState<UserData | null>(null);
+  const [userPermissions, setUserPermissions] = useState<string[]>([UserCategory.ANY_USER]);
 
-  // Estatísticas gerais
+  useEffect(() => {
+    try {
+      telegramInit();
+      const userData = getTelegramUsersInfo();
+      
+      if (process.env.NODE_ENV === "development" && !userData) {
+        setUser({
+          id: 123456789,
+          first_name: "João",
+          last_name: "Silva",
+          username: "joaosilva"
+        } as UserData);
+      } else {
+        setUser(userData);
+      }
+    } catch (error) {
+      console.error('Erro ao inicializar Telegram:', error);
+      setUser(null);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (user?.id && users[user.id]) {
+      const userRole = users[user.id].role;
+      setUserPermissions([userRole]);
+    } else if (process.env.NODE_ENV === "development") {
+      setUserPermissions([UserCategory.AMECICLISTAS]);
+    }
+  }, [user, users]);
+
+  // Check permissions
+  if (!isAuth(userPermissions, UserCategory.AMECICLISTAS) && process.env.NODE_ENV !== "development") {
+    return (
+      <div className="container mx-auto py-8 px-4">
+        <div className="text-center">
+          <h1 className="text-4xl font-bold text-red-600 mb-4">🚫 Acesso Negado</h1>
+          <p className="text-gray-600 mb-6">Você não tem permissão para ver as estatísticas.</p>
+          <Link to="/" className="bg-teal-600 text-white px-6 py-3 rounded-lg hover:bg-teal-700 transition-colors">
+            Voltar ao Dashboard
+          </Link>
+        </div>
+      </div>
+    );
+  }
+
+  // Calcular estatísticas
   const totalBicicletas = bicicletas.length;
-  const bicicletasDisponiveis = bicicletas.filter(b => b.disponivel).length;
-  const bicicletasEmprestadas = totalBicicletas - bicicletasDisponiveis;
+  const bicicletasDisponiveis = bicicletas.filter((b: any) => b.disponivel).length;
+  const bicicletasEmprestadas = bicicletas.filter((b: any) => !b.disponivel).length;
   
-  const emprestimosAtivos = emprestimos.filter(emp => emp.status === 'emprestado');
-  const emprestimosFinalizados = emprestimos.filter(emp => emp.status === 'devolvido');
   const totalEmprestimos = emprestimos.length;
+  const emprestimosAtivos = emprestimos.filter((e: any) => e.status === "emprestado").length;
+  const emprestimosFinalizados = emprestimos.filter((e: any) => e.status === "devolvido").length;
+  
+  const totalSolicitacoes = solicitacoes.length;
+  const solicitacoesPendentes = solicitacoes.filter((s: any) => s.status === "pendente").length;
+  const solicitacoesAprovadas = solicitacoes.filter((s: any) => s.status === "aprovada").length;
+  const solicitacoesRejeitadas = solicitacoes.filter((s: any) => s.status === "rejeitada").length;
 
-  // Filtrar empréstimos por período
-  const emprestimosFiltrados = emprestimos.filter(emp => {
-    const dataEmprestimo = new Date(emp.data_saida);
-    const anoEmprestimo = dataEmprestimo.getFullYear().toString();
-    const mesEmprestimo = (dataEmprestimo.getMonth() + 1).toString().padStart(2, '0');
-    
-    if (filtroAno && anoEmprestimo !== filtroAno) return false;
-    if (filtroMes && mesEmprestimo !== filtroMes) return false;
-    
-    return true;
-  });
-
-
-
-  // Empréstimos por mês
-  const emprestimosPorMes = emprestimosFiltrados.reduce((acc: any, emp) => {
-    const data = new Date(emp.data_saida);
-    const mesAno = `${(data.getMonth() + 1).toString().padStart(2, '0')}/${data.getFullYear()}`;
-    acc[mesAno] = (acc[mesAno] || 0) + 1;
+  // Estatísticas por tipo de bicicleta
+  const tiposBicicletas = bicicletas.reduce((acc: any, bicicleta: any) => {
+    const tipo = bicicleta.tipo || "Não informado";
+    acc[tipo] = (acc[tipo] || 0) + 1;
     return acc;
   }, {});
 
-  // Obter anos únicos para o filtro
-  const anosUnicos = [...new Set(emprestimos.map(emp => new Date(emp.data_saida).getFullYear().toString()))].sort();
+  // Usuários mais ativos
+  const usuariosAtivos = emprestimos.reduce((acc: any, emprestimo: any) => {
+    const userId = emprestimo.usuario_id;
+    acc[userId] = (acc[userId] || 0) + 1;
+    return acc;
+  }, {});
 
-  const meses = [
-    { value: "01", label: "Janeiro" },
-    { value: "02", label: "Fevereiro" },
-    { value: "03", label: "Março" },
-    { value: "04", label: "Abril" },
-    { value: "05", label: "Maio" },
-    { value: "06", label: "Junho" },
-    { value: "07", label: "Julho" },
-    { value: "08", label: "Agosto" },
-    { value: "09", label: "Setembro" },
-    { value: "10", label: "Outubro" },
-    { value: "11", label: "Novembro" },
-    { value: "12", label: "Dezembro" }
-  ];
+  const topUsuarios = Object.entries(usuariosAtivos)
+    .sort(([,a]: any, [,b]: any) => b - a)
+    .slice(0, 5)
+    .map(([userId, count]: any) => ({
+      userId,
+      count,
+      name: users[userId]?.name || `Usuário ${userId}`
+    }));
+
+  // Empréstimos por mês (últimos 6 meses)
+  const emprestimosRecentes = emprestimos.filter((e: any) => {
+    const dataEmprestimo = new Date(e.data_saida);
+    const seisMesesAtras = new Date();
+    seisMesesAtras.setMonth(seisMesesAtras.getMonth() - 6);
+    return dataEmprestimo >= seisMesesAtras;
+  });
 
   return (
     <div className="container mx-auto py-8 px-4">
-      <div className="mb-6">
-        <Link 
-          to="/bota-pra-rodar" 
-          className="button-secondary-full text-center mb-4"
-        >
-          ⬅️ Voltar para Bota pra Rodar
-        </Link>
-        <h1 className="text-3xl font-bold text-teal-600">📊 Estatísticas - Bota pra Rodar</h1>
+      {/* Header */}
+      <div className="text-center mb-8">
+        <h1 className="text-4xl font-bold text-purple-600 mb-2">
+          📊 Estatísticas Bota pra Rodar
+        </h1>
+        <p className="text-gray-600">Relatórios e métricas do sistema</p>
       </div>
 
-      {/* Filtros */}
-      <div className="bg-gray-50 p-4 rounded-lg mb-6">
-        <h3 className="text-lg font-semibold mb-3">Filtros</h3>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Ano</label>
-            <select
-              value={filtroAno}
-              onChange={(e) => setFiltroAno(e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md"
-            >
-              <option value="">Todos os anos</option>
-              {anosUnicos.map(ano => (
-                <option key={ano} value={ano}>{ano}</option>
-              ))}
-            </select>
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Mês</label>
-            <select
-              value={filtroMes}
-              onChange={(e) => setFiltroMes(e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md"
-            >
-              <option value="">Todos os meses</option>
-              {meses.map(mes => (
-                <option key={mes.value} value={mes.value}>{mes.label}</option>
-              ))}
-            </select>
-          </div>
-        </div>
+      {/* Navigation */}
+      <div className="mb-6">
+        <Link 
+          to="/" 
+          className="text-purple-600 hover:text-purple-800 font-medium transition-colors"
+        >
+          ← Voltar ao Dashboard
+        </Link>
       </div>
 
       {/* Estatísticas Gerais */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-2 gap-6 mb-8">
-        <div className="bg-white p-6 rounded-lg shadow-md">
-          <h3 className="text-lg font-semibold text-gray-700 mb-2">Total de Bicicletas</h3>
-          <p className="text-3xl font-bold text-teal-600">{totalBicicletas}</p>
-        </div>
-        
-        <div className="bg-white p-6 rounded-lg shadow-md">
-          <h3 className="text-lg font-semibold text-gray-700 mb-2">Disponíveis</h3>
-          <p className="text-3xl font-bold text-green-600">{bicicletasDisponiveis}</p>
-        </div>
-        
-        <div className="bg-white p-6 rounded-lg shadow-md">
-          <h3 className="text-lg font-semibold text-gray-700 mb-2">Emprestadas</h3>
-          <p className="text-3xl font-bold text-orange-600">{bicicletasEmprestadas}</p>
-        </div>
-        
-        <div className="bg-white p-6 rounded-lg shadow-md">
-          <h3 className="text-lg font-semibold text-gray-700 mb-2">Total de Empréstimos</h3>
-          <p className="text-3xl font-bold text-blue-600">{emprestimosFiltrados.length}</p>
-        </div>
-      </div>
-
-      {/* Estatísticas de Uso */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
-        <div className="bg-white p-6 rounded-lg shadow-md">
-          <h3 className="text-lg font-semibold text-gray-700 mb-2">Pessoas Beneficiadas</h3>
-          <p className="text-3xl font-bold text-purple-600">{[...new Set(emprestimos.map(emp => emp.usuario_id))].length}</p>
-        </div>
-        
-        <div className="bg-white p-6 rounded-lg shadow-md">
-          <h3 className="text-lg font-semibold text-gray-700 mb-2">Tempo Médio</h3>
-          <p className="text-lg text-gray-600">(em horas)</p>
-          <p className="text-3xl font-bold text-indigo-600">{emprestimosFinalizados.length > 0 ? Math.round(emprestimosFinalizados.reduce((acc, emp) => {
-            const inicio = new Date(emp.data_saida);
-            const fim = new Date(emp.data_devolucao);
-            return acc + (fim.getTime() - inicio.getTime()) / (1000 * 60 * 60);
-          }, 0) / emprestimosFinalizados.length) : 0}</p>
-        </div>
-        
-        <div className="bg-white p-6 rounded-lg shadow-md">
-          <h3 className="text-lg font-semibold text-gray-700 mb-2">Tempo Mínimo</h3>
-          <p className="text-lg text-gray-600">(em horas)</p>
-          <p className="text-3xl font-bold text-green-600">{emprestimosFinalizados.length > 0 ? Math.min(...emprestimosFinalizados.map(emp => {
-            const inicio = new Date(emp.data_saida);
-            const fim = new Date(emp.data_devolucao);
-            return Math.round((fim.getTime() - inicio.getTime()) / (1000 * 60 * 60));
-          })) : 0}</p>
-        </div>
-        
-        <div className="bg-white p-6 rounded-lg shadow-md">
-          <h3 className="text-lg font-semibold text-gray-700 mb-2">Tempo Máximo</h3>
-          <p className="text-lg text-gray-600">(em horas)</p>
-          <p className="text-3xl font-bold text-red-600">{emprestimosFinalizados.length > 0 ? Math.max(...emprestimosFinalizados.map(emp => {
-            const inicio = new Date(emp.data_saida);
-            const fim = new Date(emp.data_devolucao);
-            return Math.round((fim.getTime() - inicio.getTime()) / (1000 * 60 * 60));
-          })) : 0}</p>
-        </div>
-      </div>
-
-      {/* Bicicletas Mais Populares */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
-        <div className="bg-white p-6 rounded-lg shadow-md">
-          <h3 className="text-xl font-semibold text-gray-800 mb-4">Bicicleta Mais Querida</h3>
-          {(() => {
-            const contadorEmprestimos = emprestimos.reduce((acc, emp) => {
-              acc[emp.codigo_bicicleta] = (acc[emp.codigo_bicicleta] || 0) + 1;
-              return acc;
-            }, {});
-            const maisEmprestada = Object.entries(contadorEmprestimos).sort(([,a], [,b]) => b - a)[0];
-            const bicicleta = maisEmprestada ? bicicletas.find(b => b.codigo === maisEmprestada[0]) : null;
-            return bicicleta ? (
-              <div>
-                <p className="text-lg font-semibold text-teal-600">{bicicleta.nome}</p>
-                <p className="text-gray-600">Código: {bicicleta.codigo}</p>
-                <p className="text-gray-600">{maisEmprestada[1]} empréstimos</p>
-              </div>
-            ) : <p className="text-gray-500">Nenhum dado disponível</p>;
-          })()}
-        </div>
-        
-        <div className="bg-white p-6 rounded-lg shadow-md">
-          <h3 className="text-xl font-semibold text-gray-800 mb-4">Mais Tempo Emprestada</h3>
-          {(() => {
-            const temposPorBicicleta = emprestimosFinalizados.reduce((acc, emp) => {
-              const inicio = new Date(emp.data_saida);
-              const fim = new Date(emp.data_devolucao);
-              const horas = (fim.getTime() - inicio.getTime()) / (1000 * 60 * 60);
-              acc[emp.codigo_bicicleta] = (acc[emp.codigo_bicicleta] || 0) + horas;
-              return acc;
-            }, {});
-            const maisTempoEmprestada = Object.entries(temposPorBicicleta).sort(([,a], [,b]) => b - a)[0];
-            const bicicleta = maisTempoEmprestada ? bicicletas.find(b => b.codigo === maisTempoEmprestada[0]) : null;
-            return bicicleta ? (
-              <div>
-                <p className="text-lg font-semibold text-purple-600">{bicicleta.nome}</p>
-                <p className="text-gray-600">Código: {bicicleta.codigo}</p>
-                <p className="text-gray-600">{Math.round(maisTempoEmprestada[1])} horas totais</p>
-              </div>
-            ) : <p className="text-gray-500">Nenhum dado disponível</p>;
-          })()}
-        </div>
-      </div>
-
-      {/* Empréstimos por Mês */}
-      {Object.keys(emprestimosPorMes).length > 0 && (
-        <div className="bg-white p-6 rounded-lg shadow-md">
-          <h3 className="text-xl font-semibold text-gray-800 mb-4">Estatísticas Mensais de Empréstimo</h3>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {Object.entries(emprestimosPorMes)
-              .sort(([a], [b]) => b.localeCompare(a))
-              .map(([mesAno, quantidade]) => (
-                <div key={mesAno} className="bg-gray-50 p-4 rounded-lg">
-                  <h4 className="font-semibold text-gray-800 mb-2">{mesAno}</h4>
-                  <p className="text-2xl font-bold text-teal-600">{quantidade}</p>
-                  <p className="text-sm text-gray-600">empréstimos</p>
-                </div>
-              ))}
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
+        <div className="bg-gradient-to-r from-blue-500 to-blue-600 text-white p-6 rounded-lg shadow-lg">
+          <div className="text-center">
+            <div className="text-3xl mb-2">🚴</div>
+            <div className="text-2xl font-bold">{totalBicicletas}</div>
+            <div className="text-sm opacity-90">Total de Bicicletas</div>
           </div>
         </div>
-      )}
+        
+        <div className="bg-gradient-to-r from-green-500 to-green-600 text-white p-6 rounded-lg shadow-lg">
+          <div className="text-center">
+            <div className="text-3xl mb-2">✅</div>
+            <div className="text-2xl font-bold">{bicicletasDisponiveis}</div>
+            <div className="text-sm opacity-90">Disponíveis</div>
+          </div>
+        </div>
+        
+        <div className="bg-gradient-to-r from-red-500 to-red-600 text-white p-6 rounded-lg shadow-lg">
+          <div className="text-center">
+            <div className="text-3xl mb-2">🔒</div>
+            <div className="text-2xl font-bold">{bicicletasEmprestadas}</div>
+            <div className="text-sm opacity-90">Emprestadas</div>
+          </div>
+        </div>
+        
+        <div className="bg-gradient-to-r from-purple-500 to-purple-600 text-white p-6 rounded-lg shadow-lg">
+          <div className="text-center">
+            <div className="text-3xl mb-2">📈</div>
+            <div className="text-2xl font-bold">{totalEmprestimos}</div>
+            <div className="text-sm opacity-90">Total Empréstimos</div>
+          </div>
+        </div>
+      </div>
+
+      {/* Estatísticas de Empréstimos */}
+      <div className="bg-white rounded-lg shadow-lg p-6 mb-8">
+        <h3 className="text-xl font-semibold text-gray-800 mb-4">📋 Status dos Empréstimos</h3>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div className="text-center p-4 bg-yellow-50 rounded-lg border border-yellow-200">
+            <div className="text-2xl text-yellow-600 mb-2">⏳</div>
+            <div className="text-xl font-bold text-yellow-800">{emprestimosAtivos}</div>
+            <div className="text-sm text-yellow-600">Ativos</div>
+          </div>
+          
+          <div className="text-center p-4 bg-green-50 rounded-lg border border-green-200">
+            <div className="text-2xl text-green-600 mb-2">✅</div>
+            <div className="text-xl font-bold text-green-800">{emprestimosFinalizados}</div>
+            <div className="text-sm text-green-600">Finalizados</div>
+          </div>
+          
+          <div className="text-center p-4 bg-blue-50 rounded-lg border border-blue-200">
+            <div className="text-2xl text-blue-600 mb-2">📊</div>
+            <div className="text-xl font-bold text-blue-800">
+              {emprestimosFinalizados > 0 ? Math.round((emprestimosFinalizados / totalEmprestimos) * 100) : 0}%
+            </div>
+            <div className="text-sm text-blue-600">Taxa de Devolução</div>
+          </div>
+        </div>
+      </div>
+
+      {/* Estatísticas de Solicitações */}
+      <div className="bg-white rounded-lg shadow-lg p-6 mb-8">
+        <h3 className="text-xl font-semibold text-gray-800 mb-4">📝 Status das Solicitações</h3>
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+          <div className="text-center p-4 bg-gray-50 rounded-lg border border-gray-200">
+            <div className="text-2xl text-gray-600 mb-2">📋</div>
+            <div className="text-xl font-bold text-gray-800">{totalSolicitacoes}</div>
+            <div className="text-sm text-gray-600">Total</div>
+          </div>
+          
+          <div className="text-center p-4 bg-yellow-50 rounded-lg border border-yellow-200">
+            <div className="text-2xl text-yellow-600 mb-2">⏳</div>
+            <div className="text-xl font-bold text-yellow-800">{solicitacoesPendentes}</div>
+            <div className="text-sm text-yellow-600">Pendentes</div>
+          </div>
+          
+          <div className="text-center p-4 bg-green-50 rounded-lg border border-green-200">
+            <div className="text-2xl text-green-600 mb-2">✅</div>
+            <div className="text-xl font-bold text-green-800">{solicitacoesAprovadas}</div>
+            <div className="text-sm text-green-600">Aprovadas</div>
+          </div>
+          
+          <div className="text-center p-4 bg-red-50 rounded-lg border border-red-200">
+            <div className="text-2xl text-red-600 mb-2">❌</div>
+            <div className="text-xl font-bold text-red-800">{solicitacoesRejeitadas}</div>
+            <div className="text-sm text-red-600">Rejeitadas</div>
+          </div>
+        </div>
+      </div>
+
+      {/* Tipos de Bicicletas */}
+      <div className="bg-white rounded-lg shadow-lg p-6 mb-8">
+        <h3 className="text-xl font-semibold text-gray-800 mb-4">🚲 Distribuição por Tipo</h3>
+        <div className="space-y-3">
+          {Object.entries(tiposBicicletas).map(([tipo, quantidade]: any) => (
+            <div key={tipo} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+              <span className="font-medium text-gray-800 capitalize">{tipo}</span>
+              <div className="flex items-center gap-2">
+                <div className="w-32 bg-gray-200 rounded-full h-2">
+                  <div 
+                    className="bg-blue-600 h-2 rounded-full" 
+                    style={{ width: `${(quantidade / totalBicicletas) * 100}%` }}
+                  ></div>
+                </div>
+                <span className="text-sm font-bold text-gray-600 w-8">{quantidade}</span>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Top Usuários */}
+      <div className="bg-white rounded-lg shadow-lg p-6 mb-8">
+        <h3 className="text-xl font-semibold text-gray-800 mb-4">🏆 Usuários Mais Ativos</h3>
+        {topUsuarios.length === 0 ? (
+          <div className="text-center py-8">
+            <div className="text-4xl mb-4">📭</div>
+            <p className="text-gray-600">Nenhum empréstimo registrado ainda</p>
+          </div>
+        ) : (
+          <div className="space-y-3">
+            {topUsuarios.map((usuario: any, index: number) => (
+              <div key={usuario.userId} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                <div className="flex items-center">
+                  <span className="text-2xl mr-3">
+                    {index === 0 ? '🥇' : index === 1 ? '🥈' : index === 2 ? '🥉' : '👤'}
+                  </span>
+                  <div>
+                    <p className="font-semibold text-gray-800">{usuario.name}</p>
+                    <p className="text-sm text-gray-600">ID: {usuario.userId}</p>
+                  </div>
+                </div>
+                <div className="text-right">
+                  <p className="text-lg font-bold text-purple-600">{usuario.count}</p>
+                  <p className="text-xs text-gray-500">empréstimos</p>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Resumo Temporal */}
+      <div className="bg-white rounded-lg shadow-lg p-6">
+        <h3 className="text-xl font-semibold text-gray-800 mb-4">📅 Atividade Recente</h3>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <div className="text-center p-4 bg-blue-50 rounded-lg border border-blue-200">
+            <div className="text-2xl text-blue-600 mb-2">📈</div>
+            <div className="text-xl font-bold text-blue-800">{emprestimosRecentes.length}</div>
+            <div className="text-sm text-blue-600">Empréstimos (últimos 6 meses)</div>
+          </div>
+          
+          <div className="text-center p-4 bg-green-50 rounded-lg border border-green-200">
+            <div className="text-2xl text-green-600 mb-2">⚡</div>
+            <div className="text-xl font-bold text-green-800">
+              {emprestimosRecentes.length > 0 ? Math.round(emprestimosRecentes.length / 6) : 0}
+            </div>
+            <div className="text-sm text-green-600">Média por mês</div>
+          </div>
+        </div>
+      </div>
     </div>
   );
 }

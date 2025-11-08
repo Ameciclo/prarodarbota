@@ -1,5 +1,5 @@
 import { json, type ActionFunctionArgs } from "@remix-run/node";
-import { cadastrarBicicleta } from "~/api/firebaseConnection.server";
+import { createBicicleta } from "~/api/firebaseConnection.server";
 
 export async function cadastrarBicicletaAction({ request }: ActionFunctionArgs) {
   const formData = await request.formData();
@@ -13,19 +13,6 @@ export async function cadastrarBicicletaAction({ request }: ActionFunctionArgs) 
     const observacoes = formData.get("observacoes") as string;
     const foto = formData.get("foto") as string;
     
-    if (process.env.NODE_ENV === "development") {
-      console.log("[DEV] Simulando cadastro de bicicleta:", {
-        codigo, nome, tipo, cor, observacoes, foto: foto ? "[IMAGEM]" : "sem foto"
-      });
-      
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      
-      return json({ 
-        success: true, 
-        message: "[DEV] Bicicleta cadastrada com sucesso! (simulado)" 
-      });
-    }
-    
     try {
       const bicicletaData = {
         codigo,
@@ -34,13 +21,10 @@ export async function cadastrarBicicletaAction({ request }: ActionFunctionArgs) 
         cor,
         observacoes,
         foto: foto || null,
-        disponivel: true,
-        emprestada: false,
-        created_at: new Date().toISOString(),
-        status: "ativa"
+        categoria: tipo
       };
       
-      await cadastrarBicicleta(bicicletaData);
+      await createBicicleta(bicicletaData);
       
       return json({ 
         success: true, 

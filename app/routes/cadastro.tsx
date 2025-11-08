@@ -6,7 +6,7 @@ import { getTelegramUsersInfo } from "~/utils/users";
 import telegramInit from "~/utils/telegramInit";
 import { formatCPF, formatPhone } from "~/utils/format";
 import { validateCPF } from "~/utils/idNumber";
-import db from "~/api/firebaseAdmin.server.js";
+import { cadastrarUsuarioCompleto } from "~/api/firebaseConnection.server";
 import { cadastroLoader } from "~/handlers/loaders/cadastro";
 
 export const loader = cadastroLoader;
@@ -27,9 +27,8 @@ export async function action({ request }: ActionFunctionArgs) {
     const cidade = formData.get("cidade") as string;
     const cep = formData.get("cep") as string;
     
-    // Simular em desenvolvimento
-    if (process.env.NODE_ENV === "development") {
-      console.log("[DEV] Simulando cadastro de usuário:", {
+    try {
+      const userData = {
         userId,
         firstName,
         lastName,
@@ -40,41 +39,9 @@ export async function action({ request }: ActionFunctionArgs) {
         bairro,
         cidade,
         cep
-      });
-      
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      
-      return json({ 
-        success: true, 
-        message: "[DEV] Usuário cadastrado com sucesso! (simulado)" 
-      });
-    }
-    
-    try {
-      const userData = {
-        id: userId,
-        name: `${firstName} ${lastName}`,
-        role: UserCategory.ANY_USER,
-        telegram_user: {
-          id: userId,
-          first_name: firstName,
-          last_name: lastName
-        },
-        ameciclo_register: {
-          email,
-          cpf,
-          telefone,
-          endereco,
-          bairro,
-          cidade,
-          cep,
-          created_at: new Date().toISOString(),
-          status: "ativo"
-        }
       };
       
-      const userRef = db.ref(`subscribers/${userId}`);
-      await userRef.set(userData);
+      await cadastrarUsuarioCompleto(userData);
       
       return json({ 
         success: true, 

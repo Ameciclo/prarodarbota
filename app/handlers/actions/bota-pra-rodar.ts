@@ -1,10 +1,8 @@
-import { json, redirect, type ActionFunctionArgs } from "@remix-run/node";
+import { json, type ActionFunctionArgs } from "@remix-run/node";
 import { 
-  solicitarEmprestimoBicicleta, 
+  finalizarEmprestimo, 
   aprovarSolicitacaoBicicleta, 
-  rejeitarSolicitacaoBicicleta, 
-  registrarDevolucaoBicicleta,
-  cadastrarBicicleta,
+  rejeitarSolicitacaoBicicleta,
   getUsersFirebase 
 } from "~/api/firebaseConnection.server";
 import { getTelegramUsersInfo } from "~/utils/users";
@@ -13,8 +11,8 @@ import { isAuth } from "~/utils/isAuthorized";
 
 export async function botaPraRodarAction({ request }: ActionFunctionArgs) {
   const formData = await request.formData();
-  const action = formData.get("action") as string;
-
+  const actionType = formData.get("actionType") as string;
+  
   try {
     const users = await getUsersFirebase();
     const telegramUser = getTelegramUsersInfo();
@@ -29,71 +27,66 @@ export async function botaPraRodarAction({ request }: ActionFunctionArgs) {
       userPermissions = [users[userId].role];
     }
 
-    switch (action) {
-      case "solicitar":
-        if (!userId) {
-          throw new Error("Usuário não identificado");
-        }
-        
-        const codigoBicicleta = formData.get("codigo_bicicleta") as string;
-        
-        // Se é coordenador de projeto, vai direto para emprestado
-        if (isAuth(userPermissions, UserCategory.PROJECT_COORDINATORS)) {
-          await aprovarSolicitacaoBicicleta("", userId, codigoBicicleta, true);
-        } else {
-          await solicitarEmprestimoBicicleta(userId, codigoBicicleta);
-        }
-        
-        return redirect("/bota-pra-rodar");
+    if (!userId) {
+      return json({ success: false, error: "Usuário não identificado" });
+    }
 
-      case "aprovar_solicitacao":
+    switch (actionType) {
+      case "finalizarEmprestimo": {
         if (!isAuth(userPermissions, UserCategory.PROJECT_COORDINATORS)) {
-          throw new Error("Sem permissão para aprovar solicitações");
+          return json({ success: false, error: "Sem permissão para finalizar empréstimos" });
         }
         
-        const solicitacaoId = formData.get("solicitacao_id") as string;
-        await aprovarSolicitacaoBicicleta(solicitacaoId, userId!, "", false);
-        return redirect("/bota-pra-rodar");
-
-      case "rejeitar_solicitacao":
+        const emprestimoId = formData.get("emprestimoId") as string;
+        await finalizarEmprestimo(emprestimoId);
+        
+        return json({ 
+          success: true, 
+          message: "Empréstimo finalizado com sucesso!" 
+        });
+      }
+      
+      case "aprovarSolicitacao": {
         if (!isAuth(userPermissions, UserCategory.PROJECT_COORDINATORS)) {
-          throw new Error("Sem permissão para rejeitar solicitações");
+          return json({ success: false, error: "Sem permissão para aprovar solicitações" });
         }
         
-        const solicitacaoIdRejeitar = formData.get("solicitacao_id") as string;
-        await rejeitarSolicitacaoBicicleta(solicitacaoIdRejeitar);
-        return redirect("/bota-pra-rodar");
-
-      case "registrar_devolucao":
+        const solicitacaoId = formData.get("solicitacaoId") as string;
+        const usuarioId = formData.get("usuarioId") as string;
+        const codigoBicicleta = formData.get("codigoBicicleta") as string;
+        
+        await aprovarSolicitacaoBicicleta(solicitacaoId, parseInt(usuarioId), codigoBicicleta);
+        
+        return json({ 
+          success: true, 
+          message: "Solicitação aprovada com sucesso!" 
+        });
+      }
+      
+      case "rejeitarSolicitacao": {
         if (!isAuth(userPermissions, UserCategory.PROJECT_COORDINATORS)) {
-          throw new Error("Sem permissão para registrar devoluções");
+          return json({ success: false, error: "Sem permissão para rejeitar solicitações" });
         }
         
-        const emprestimoId = formData.get("emprestimo_id") as string;
-        await registrarDevolucaoBicicleta(emprestimoId);
-        return redirect("/bota-pra-rodar");
-
-      case "cadastrar_bicicleta":
-        if (!isAuth(userPermissions, UserCategory.PROJECT_COORDINATORS)) {
-          throw new Error("Sem permissão para cadastrar bicicletas");
-        }
+        const solicitacaoId = formData.get("solicitacaoId") as string;
+        const motivo = formData.get("motivo") as string;
         
-        const dadosBicicleta = {
-          codigo: formData.get("codigo") as string,
-          nome: formData.get("nome") as string,
-          tipo: formData.get("tipo") as string,
-          descricao: formData.get("descricao") as string || "",
-          disponivel: true
-        };
+        await rejeitarSolicitacaoBicicleta(solicitacaoId, motivo);
         
-        await cadastrarBicicleta(dadosBicicleta);
-        return redirect("/bota-pra-rodar");
-
+        return json({ 
+          success: true, 
+          message: "Solicitação rejeitada!" 
+        });
+      }
+      
       default:
-        throw new Error("Ação não reconhecida");
+        return json({ success: false, error: "Ação não reconhecida" });
     }
   } catch (error) {
-    console.error("Erro na ação do Bota pra Rodar:", error);
-    return json({ error: error.message }, { status: 400 });
+    console.error("Erro na ação:", error);
+    return json({ 
+      success: false, 
+      error: "Erro interno do servidor" 
+    });
   }
 }
